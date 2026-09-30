@@ -1,0 +1,81 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LandTrust: One Parcel. One Truth.</title>
+<style>
+:root{--bg:#fff;--ink:#222;--mute:#5f5f5f;--tint:#f3f3f3;--line:#d9d9d9;--acc:#2c5f2d;--fg:#fff;--bad:#a33}
+@media(prefers-color-scheme:dark){:root{--bg:#161816;--ink:#ececec;--mute:#a4a8a4;--tint:#202320;--line:#3a3e3a;--acc:#7fc27f;--fg:#102010;--bad:#e08a8a}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 Calibri,Carlito,"Segoe UI",Arial,sans-serif}
+h1,h2,h3{font-family:Cambria,Georgia,serif;margin:0}
+header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 24px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+header h1{font-size:22px}header small{color:var(--mute);margin-left:8px}
+button,input,select{font:inherit;color:var(--ink)}
+input,select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+button{cursor:pointer;border:1px solid var(--line);background:none;border-radius:6px;padding:8px 14px}
+button.p{background:var(--acc);color:var(--fg);border-color:var(--acc);font-weight:600}
+button.w{color:var(--bad)}:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px 24px}
+.stats div{background:var(--tint);border-radius:8px;padding:12px 16px}.stats b{font:700 26px Cambria,Georgia,serif;display:block}.stats span{color:var(--mute);font-size:14px}
+main{display:grid;grid-template-columns:1.2fr 1fr;gap:24px;padding:0 24px 32px}
+.card{border:1px solid var(--line);border-radius:10px;padding:16px}
+svg{width:100%;height:auto;display:block;background:var(--tint);border-radius:8px}
+.par{fill:var(--bg);stroke:var(--ink);stroke-width:1.5;cursor:pointer}.par:hover{fill:var(--tint)}.par.on{fill:var(--acc)}
+.par.Awaiting{stroke-dasharray:6 3;stroke-width:2.5}.par.Dispute{stroke:var(--bad);stroke-width:3}
+.lb{font:600 13px Calibri,Arial;fill:var(--mute);pointer-events:none;text-anchor:middle}.lb.on{fill:var(--fg)}
+.bar{display:flex;gap:8px;margin-bottom:12px}.bar input{flex:1}
+.tabs{display:flex;gap:14px;margin:10px 0}.tabs button{border:0;border-bottom:2px solid transparent;border-radius:0;padding:4px 0;color:var(--mute)}.tabs .a{color:var(--ink);border-color:var(--acc)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;margin:0}dt{color:var(--mute)}dd{margin:0}
+.act{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.row{display:flex;gap:8px;margin-top:10px}.row input{flex:1}
+ol{list-style:none;padding:0 0 0 14px;margin:8px 0;border-left:1px solid var(--line)}li{padding:5px 0;font-size:14px}li small{display:block;color:var(--mute)}code{color:var(--acc);font-size:12px}
+.ok{color:var(--acc);font-weight:600}.no{color:var(--bad);font-weight:600}
+.m{display:flex;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+#t{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;display:none}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);width:min(340px,92vw)}dialog input{width:100%;margin:6px 0}
+@media(max-width:800px){main{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+</style></head><body>
+<header><div><h1>LandTrust<small>One parcel. One truth.</small></h1></div><div id="who"></div></header>
+<div class="stats" id="stats"></div>
+<main>
+ <section class="card"><div class="bar"><input id="q" placeholder="Search by parcel ID, owner or khata" aria-label="Search"></div>
+  <svg id="map" viewBox="0 0 600 420" role="group" aria-label="Village parcel map"></svg>
+  <p style="color:var(--mute);font-size:13px;margin:8px 0 0">Dashed outline: awaiting verification. Red outline: dispute.</p></section>
+ <section class="card" id="det"><p style="color:var(--mute)">Select a parcel on the map.</p></section>
+</main>
+<dialog id="dlg"><form method="dialog"><h3>Sign in</h3><p style="color:var(--mute);font-size:14px;margin:4px 0">Demo accounts: surveyor / survey123, officer / officer123</p>
+<input id="u" placeholder="Username" autocomplete="username"><input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+<p id="le" class="no" style="margin:4px 0"></p><div class="act"><button class="p" id="go" type="button">Sign in</button><button>Cancel</button></div></form></dialog>
+<div id="t" role="status"></div>
+<script>
+let S=JSON.parse(localStorage.getItem("lt")||"null"),P=[],cur=null,tab="rec";
+const $=i=>document.getElementById(i),esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function toast(m){const t=$("t");t.textContent=m;t.style.display="block";setTimeout(()=>t.style.display="none",2600)}
+async function api(p,o={}){const r=await fetch("/api"+p,{method:o.method||"GET",headers:{"Content-Type":"application/json",...(S?{Authorization:"Bearer "+S.token}:{})},body:o.body?JSON.stringify(o.body):undefined});
+ const j=await r.json();if(!r.ok){toast(j.error||"Something went wrong");throw j}return j}
+function who(){$("who").innerHTML=S?`${esc(S.username)} (${S.role}) <button id="lo">Sign out</button>`:`<button class="p" id="li">Sign in</button>`;
+ if(S)$("lo").onclick=()=>{S=null;localStorage.removeItem("lt");who();show()};else $("li").onclick=()=>$("dlg").showModal()}
+$("go").onclick=async()=>{try{S=await api("/login",{method:"POST",body:{username:$("u").value,password:$("pw").value}});localStorage.setItem("lt",JSON.stringify(S));$("dlg").close();who();show()}catch(e){$("le").textContent=e.error||""}};
+async function stats(){const s=await api("/stats");$("stats").innerHTML=[["parcels","Parcels"],["verified","Verified"],["pending_mutations","Pending mutations"],["disputes","Disputes"]].map(k=>`<div><b>${s[k[0]]}</b><span>${k[1]}</span></div>`).join("")}
+async function load(){P=await api("/parcels?q="+encodeURIComponent($("q").value));draw()}
+function draw(){const pts=P.flatMap(p=>p.geom),xs=pts.map(a=>a[0]),ys=pts.map(a=>a[1]);if(!pts.length){$("map").innerHTML="";return}
+ const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys),k=Math.min(560/(x1-x0),380/(y1-y0));
+ const f=a=>[20+(a[0]-x0)*k,400-(a[1]-y0)*k];
+ $("map").innerHTML=P.map(p=>{const c=p.geom.map(f),cx=c.reduce((s,a)=>s+a[0],0)/c.length,cy=c.reduce((s,a)=>s+a[1],0)/c.length,on=cur==p.id;
+  return `<polygon class="par ${p.status.split(" ")[0]} ${on?"on":""}" data-id="${p.id}" tabindex="0" role="button" aria-label="Parcel ${p.id}, ${esc(p.owner)}" points="${c.map(a=>a.join(",")).join(" ")}"/><text class="lb ${on?"on":""}" x="${cx}" y="${cy}">${p.id}</text>`}).join("");
+ document.querySelectorAll(".par").forEach(e=>{e.onclick=()=>pick(e.dataset.id);e.onkeydown=ev=>{if(ev.key=="Enter")pick(e.dataset.id)}})}
+async function pick(id,t){cur=id;tab=t||tab;draw();show()}
+async function show(){if(!cur)return;const r=await api("/parcels/"+cur),p=r.parcel,off=S&&S.role=="officer",sv=S&&S.role=="surveyor";
+ let b;
+ if(tab=="rec")b=`<dl><dt>Owner</dt><dd>${esc(p.owner)}</dd><dt>Khata</dt><dd>${p.khata}</dd><dt>Area</dt><dd>${p.area} ha, ${p.class}</dd><dt>Status</dt><dd>${p.status}</dd></dl>
+  <div class="act">${sv&&p.status!="Verified"?`<button class="p" id="vf">Confirm boundary</button>`:""}${S?`<button class="w" id="ds">Flag dispute</button>`:""}</div>
+  ${off?`<div class="row"><input id="by" placeholder="Buyer name"><button class="p" id="rg">Register sale</button></div>`:""}
+  ${!S?`<p style="color:var(--mute);font-size:14px">Sign in to verify, flag or register.</p>`:""}
+  <h3 style="margin-top:18px;font-size:17px">Mutation cases</h3>${r.mutations.map(m=>`<div class="m"><span>To ${esc(m.new_owner)}: ${m.status}</span>${off&&m.status=="Pending"?`<button class="p" data-m="${m.id}">Approve</button>`:""}</div>`).join("")||`<p style="color:var(--mute);font-size:14px">None</p>`}`;
+ else b=`<p class="${r.chain_valid?"ok":"no"}">${r.chain_valid?"Chain intact: no entries altered":"Chain broken: history was altered"}</p><ol>${r.history.map(h=>`<li>${esc(h.event)}<small>${esc(h.actor)}, ${new Date(h.ts*1e3).toLocaleString()} <code>${h.hash}</code></small></li>`).join("")}</ol>`;
+ $("det").innerHTML=`<h2>Parcel ${p.id}</h2><div class="tabs"><button class="${tab=="rec"?"a":""}" id="t1">Record</button><button class="${tab=="his"?"a":""}" id="t2">Ownership history</button></div>${b}`;
+ $("t1").onclick=()=>pick(cur,"rec");$("t2").onclick=()=>pick(cur,"his");
+ const go=async(path,body,msg)=>{await api(path,{method:"POST",body});toast(msg);await load();await stats();show()};
+ if($("vf"))$("vf").onclick=()=>go(`/parcels/${cur}/verify`,{},"Boundary confirmed");
+ if($("ds"))$("ds").onclick=()=>{const n=prompt("Describe the dispute");if(n)go(`/parcels/${cur}/dispute`,{note:n},"Dispute flagged")};
+ if($("rg"))$("rg").onclick=()=>go("/registrations",{parcel_id:cur,buyer:$("by").value},"Sale registered, mutation case opened");
+ document.querySelectorAll("[data-m]").forEach(e=>e.onclick=()=>go(`/mutations/${e.dataset.m}/approve`,{},"Mutation approved, owner updated"))}
+$("q").oninput=load;who();load();stats();
+</script></body></html>
